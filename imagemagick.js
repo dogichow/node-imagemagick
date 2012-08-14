@@ -154,7 +154,7 @@ exports.identify = function(pathOrArgs, callback) {
       } else {
         result = parseIdentify(stdout);
 
-		if (result.geometry == undefined) {
+		if (result == undefined || result.geometry == undefined) {
 			callback(new Error("Cannot identify geometry."));
 			return;
 		}
