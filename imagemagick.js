@@ -153,6 +153,12 @@ exports.identify = function(pathOrArgs, callback) {
         result = stdout;
       } else {
         result = parseIdentify(stdout);
+
+		if (result.geometry == undefined) {
+			callback(new Error("Cannot identify geometry."));
+			return;
+		}
+		
         geometry = result['geometry'].split(/x/);
 
         result.format = result.format.match(/\S*/)[0]
