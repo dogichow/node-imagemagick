@@ -1,5 +1,4 @@
-var sys = require('sys'),
-    childproc = require('child_process'),
+var childproc = require('child_process'),
     EventEmitter = require('events').EventEmitter;
 
 
@@ -80,7 +79,8 @@ function exec2(file, args /*, options, callback */) {
   child.stdout.addListener("data", function (chunk) { std.out(chunk, options.encoding); });
   child.stderr.addListener("data", function (chunk) { std.err(chunk, options.encoding); });
 
-  child.addListener("exit", function (code, signal) {
+  var version = process.versions.node.split('.');
+  child.addListener(version[0] == 0 && version[1] < 7 ? "exit" : "close", function (code, signal) {
     if (timeoutId) clearTimeout(timeoutId);
     if (code === 0 && signal === null) {
       std.finish(null);
@@ -104,7 +104,7 @@ function parseIdentify(input) {
       props = [prop],
       prevIndent = 0,
       indents = [indent],
-      currentLine, comps, indent;
+      currentLine, comps, indent, i;
 
   lines.shift(); //drop first line (Image: name.jpg)
 
@@ -114,7 +114,7 @@ function parseIdentify(input) {
       indent = currentLine.search(/\S/);
       comps = currentLine.split(': ');
       if (indent > prevIndent) indents.push(indent);
-      while (indent < prevIndent) {
+      while (indent < prevIndent && props.length) {
         indents.pop();
         prop = props.pop();
         prevIndent = indents[indents.length - 1];
@@ -128,7 +128,7 @@ function parseIdentify(input) {
       prevIndent = indent;
     }
   }
-  return props[0];
+  return prop;
 };
 
 exports.identify = function(pathOrArgs, callback) {
@@ -292,33 +292,52 @@ exports.resize = function(options, callback) {
 exports.crop = function (options, callback) {
   if (typeof options !== 'object')
     throw new TypeError('First argument must be an object');
-  if (!options.srcPath)
-    throw new TypeError("No srcPath defined");
-  if (!options.dstPath)
-    throw new TypeError("No dstPath defined");
+  if (!options.srcPath && !options.srcData)
+    throw new TypeError("No srcPath or data defined");
   if (!options.height && !options.width)
     throw new TypeError("No width or height defined");
+  
+  if (options.srcPath){
+    var args = options.srcPath;
+  } else {
+    var args = {
+      data: options.srcData
+    };
+  }
 
-  exports.identify(options.srcPath, function(err, meta) {
+  exports.identify(args, function(err, meta) {
     if (err) return callback && callback(err);
     var t         = exports.resizeArgs(options),
         ignoreArg = false,
+        printNext  = false,
         args      = [];
     t.args.forEach(function (arg) {
+      if (printNext === true){
+        console.log("arg", arg);
+        printNext = false;
+      }
       // ignoreArg is set when resize flag was found
       if (!ignoreArg && (arg != '-resize'))
         args.push(arg);
       // found resize flag! ignore the next argument
-      if (arg == '-resize')
+      if (arg == '-resize'){
+        console.log("resize arg");
         ignoreArg = true;
+        printNext = true;
+      }
+      if (arg === "-crop"){
+        console.log("crop arg");
+        printNext = true;
+      }
       // found the argument after the resize flag; ignore it and set crop options
       if ((arg != "-resize") && ignoreArg) {
         var dSrc      = meta.width / meta.height,
             dDst      = t.opt.width / t.opt.height,
-            resizeTo  = (dSrc < dDst) ? ''+t.opt.width+'x' : 'x'+t.opt.height;
+            resizeTo  = (dSrc < dDst) ? ''+t.opt.width+'x' : 'x'+t.opt.height,
+            dGravity  = options.gravity ? options.gravity : "Center";
         args = args.concat([
           '-resize', resizeTo,
-          '-gravity', 'Center',
+          '-gravity', dGravity,
           '-crop', ''+t.opt.width + 'x' + t.opt.height + '+0+0',
           '+repage'
         ]);
@@ -360,7 +379,7 @@ exports.resizeArgs = function(options) {
   // normalize options
   if (!opt.format) opt.format = 'jpg';
   if (!opt.srcPath) {
-    opt.srcPath = (opt.srcFormat ? opt.srcFormat +':-' : '-');
+    opt.srcPath = (opt.srcFormat ? opt.srcFormat +':-' : '-'); // stdin
   }
   if (!opt.dstPath)
     opt.dstPath = (opt.format ? opt.format+':-' : '-'); // stdout
