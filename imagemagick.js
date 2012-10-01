@@ -134,7 +134,7 @@ function parseIdentify(input) {
 exports.identify = function(pathOrArgs, callback) {
   var isCustom = Array.isArray(pathOrArgs),
       isData,
-      args = isCustom ? ([]).concat(pathOrArgs) : ['-verbose', pathOrArgs];
+      args = isCustom ? ([]).concat(pathOrArgs) : ['-format', '%m %w %h %z %Q', pathOrArgs];
 
   if (typeof args[args.length-1] === 'object') {
     isData = true;
@@ -152,20 +152,16 @@ exports.identify = function(pathOrArgs, callback) {
       if (isCustom) {
         result = stdout;
       } else {
-        result = parseIdentify(stdout);
-
-		if (result == undefined || result.geometry == undefined) {
-			callback(new Error("Cannot identify geometry."));
-			return;
-		}
-		
-        geometry = result['geometry'].split(/x/);
-
-        result.format = result.format.match(/\S*/)[0]
-        result.width = parseInt(geometry[0]);
-        result.height = parseInt(geometry[1]);
-        result.depth = parseInt(result.depth);
-        if (result.quality !== undefined) result.quality = parseInt(result.quality) / 100;
+		var v = stdout.trim().split(' ');
+        result = {
+          format: v[0],
+          width: parseInt(v[1]),
+          height: parseInt(v[2]),
+          depth: parseInt(v[3])
+        };
+        if (v[4] !== "0") {
+          result.quality = parseInt(v[4]) / 100;
+        }
       }
     }
     callback(err, result);
